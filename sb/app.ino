@@ -19,12 +19,14 @@ float ratio = 0;
 float concentration = 0;
 float ratio25 = 0;
 float concentration25 = 0;
-unsigned long concenOT25 [5];
+unsigned long concenOT25 = 0;
+unsigned long currentConcentration = 0;
 //Motor
 int vacMotor = 12; // controlled by pwm output, based on DSM readings
 int eRoller = 13; // just 1
+int outputvalue
 //switch
-int bPin = 22;
+int bPin = 2;
 int buttonstate = 0;
 
 //declare functions
@@ -61,59 +63,60 @@ unsigned long sizeTwoFive() { // get 2.5
   return concentration;
 }
 
-void wait() {
+
+void wait(int timew) {
   for (int j = 0; j <= 29; j++) { 
       sizeTwoFive();
       Serial.print("waiting " );
-      Serial.print(30-j);
+      Serial.print(timew-j);
       Serial.println("s for sensor warmup");
       delay(1000);
     }
 }
 
-unsigned long PMatAveragelarge() {
-  unsigned long AveConcentration = 0;
-  for (int i = 0; i <= 4; i++) {
-    concenOT25[i] = sizeTwoFive();
+unsigned long getaverage(int size, int limit) {
+  unsigned long baselinevalue [limit];
+  unsigned long averagevalue = 0;
+  if (size == 1) {
+    for (int i = 0; i <= limit; i++ ) {
+      baselinevalue [i] = sizeOne();
+    }
   }
-  for (int k = 0; k <= 4; k++) {
-    AveConcentration = AveConcentration + concenOT25 [k];
+  else if (size == 2) {
+    for (int i = 0; i <= limit; i++) {
+      baselinevalue [i] = sizeTwoFive();
+    }
   }
-  AveConcentration = AveConcentration / 5;
-  Serial.print("average concentration = ");
-  Serial.print(AveConcentration);
-  Serial.println(" pcs/0.025cf");
-  Serial.println('\n');
-  return AveConcentration;
+  for (int j = 0; j <= limit; j++) {
+    averagevalue = averagevalue + baselinevalue [j];
+  }
+  averagevalue = averagevalue / limit;
+  return averagevalue;
 }
 
-unsigned long PMatAveragesmall() {
-  unsigned long AveConcentration = 0;
-  for (int i = 0; i <= 4; i++) {
-    concenOT25[i] = sizeOne();
-  }
-  for (int k = 0; k <= 4; k++) {
-    AveConcentration = AveConcentration + concenOT25 [k];
-  }
-  AveConcentration = AveConcentration / 5;
-  Serial.print("average concentration = ");
-  Serial.print(AveConcentration);
-  Serial.println(" pcs/0.01cf");
-  Serial.println('\n');
-  return AveConcentration;
-}
-
-bool trackbutton(int BUTTON_PIN) {// will loop until it detects a button press, idk if this is the best approach
-  bool run = false;
-  buttonstate = digitalread(BUTTON_PIN); //read button state
+int trackbutton(int BUTTON_PIN) {// will loop until it detects a button press, idk if this is the best approach
+  int run = 0;
+  buttonstate = digitalRead(BUTTON_PIN); //read button state
   if (buttonstate == HIGH) {
-    run = true;
+    run = 1;
   }
   else {
-    run = false;
+    run = 0;
   }
 
   return run;
+}
+
+void start() {
+ int state = trackbutton(bPin);
+ if (state == 1) {
+   Serial.println("1");
+   digitalWrite(eRoller, HIGH); // turns on roller motor
+   
+ }
+ else {
+   Serial.println("0");
+ }
 }
 
 
@@ -128,8 +131,8 @@ void setup() {
 }
 
 void loop() {
-  PMatAveragelarge();
-  delay(1000);
+ // concenOT25 = getaverage(2.5, 10); // gets baseline dust amount.
+  start();
+
+
 }
-
-
