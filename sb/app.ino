@@ -1,15 +1,14 @@
 /* RESEARCHHHHHHH
 Button:
-  - pushbutton attached to pin 2 from +3V (5v already used for DSM)
-  - 10K resistor attached to pin 2 from ground
+  - pushbutton attached to pin 12 from +5V 
+  - 10K/1K resistor attached to pin 12 from ground
 Motor:
-  - vacuum motor connected to d12
-  - roller/eraser to d13
+ - motorspeed takes in a byte value, which ranges from 0 to 255. currently set to 128.
 Sensor:
   -
 */
 //DSM
-int parM1 = 8; // for 1um particles
+int parM1 = 11; // for 1um particles, pin 8 is a bitch (not working/code wasn't working.)
 int parM2 = 9; // for 2.5um particles
 unsigned long duration;
 unsigned long starttime;
@@ -21,21 +20,28 @@ float ratio25 = 0;
 float concentration25 = 0;
 unsigned long concenOT25 = 0;
 unsigned long currentConcentration = 0;
-//Motor
-int vacMotor = 12; // controlled by pwm output, based on DSM readings
-int eRoller = 3; // just 1
-int outputvalue;
+//Motor + motor control
+const byte PIN_IN1 = 2;
+const byte PIN_IN2 = 3;
+const byte PIN_IN3 = 4;
+const byte PIN_IN4 = 5;
+const byte PIN_EN1 = 6; // not gonna be used, unless roller will also have variable speed. jumper placed on pins for constant speed
+const byte PIN_EN2 = 7;
 //switch
-int bPin = 2;
+const int bPin = 12;
+const int ledPin = 13; //temporary, only for diag
 int buttonstate = 0;
+int lstate = 0; 
+int counter = 0;
 
 //declare functions
-unsigned long sizeOne() { // unsigned long functions... what the fuck
+unsigned long sizeOne() { 
   duration = pulseIn(parM1, LOW);
   LPulseOc = LPulseOc + duration;
-  if ((millis()-starttime) >= sampletime_ms) //if the sample time < statedT
+  if ((millis()-starttime) >= sampletime_ms) 
   {
-    ratio = LPulseOc/(sampletime_ms*10.0);  
+    ratio25 = LPulseOc/(sampletime_ms*10.0);  
+    concentration = 1.1*pow(ratio25,3)-3.8*pow(ratio25,2)+520*ratio25+0.62;
     Serial.print("Concentration = ");
     Serial.print(concentration);
     Serial.println(" pcs/0.01cf");
@@ -60,7 +66,7 @@ unsigned long sizeTwoFive() { // get 2.5
     LPulseOc = 0;
     starttime = millis();
   }
-  return concentration;
+  return concentration25;
 }
 
 
@@ -95,69 +101,142 @@ unsigned long getaverage(int size, int limit) {// note that size can only be 1 o
   return averagevalue;
 }
 
-int trackbutton(int BUTTON_PIN) {// will loop until it detects a button press, idk if this is the best approach
-  int run = 0;
-  buttonstate = digitalRead(BUTTON_PIN); //read button state
-  if (buttonstate == HIGH) {
-    run = 1;
-  }
-  else {
-    run = 0;
-  }
-
-  return run;
+void speedSetting(byte val) { //sets speed for motor
+  analogWrite(PIN_EN2, val); 
 }
 
-void startmotor(int motor_pin, int state) {
-  if (state == 0) {
-      digitalWrite(motor_pin, LOW);
-  }
-  else if (state == 1) {
-    digitalWrite(motor_pin, HIGH);
+void start_motors() {
+  //move motor 1
+  digitalWrite(PIN_IN1, LOW); // PIN_IN1 low, PIN_IN2 HIGH = reverse direction
+  digitalWrite(PIN_IN2, HIGH);
+  //move motor 2 (vac)
+  digitalWrite(PIN_IN3, LOW);
+  digitalWrite(PIN_IN4, HIGH);
+}
+
+void vac_motor() {
+  digitalWrite(PIN_IN3, LOW);
+  digitalWrite(PIN_IN4, HIGH);
+}
+
+void roller_motor() {
+  digitalWrite(PIN_IN1, LOW); 
+  digitalWrite(PIN_IN2, HIGH);
+}
+
+void vac_off() {
+  digitalWrite(PIN_IN3, LOW);
+  digitalWrite(PIN_IN4, LOW);
+}
+
+void stop_motors() {
+  digitalWrite(PIN_IN1,LOW);
+  digitalWrite(PIN_IN2,LOW);
+  digitalWrite(PIN_IN3,LOW);
+  digitalWrite(PIN_IN4,LOW);  
+}
+
+void reverse_motors() {
+  digitalWrite(PIN_IN1, HIGH); 
+  digitalWrite(PIN_IN2, LOW);
+  //move motor 2 (vac)
+  digitalWrite(PIN_IN3, HIGH);
+  digitalWrite(PIN_IN4, LOW);
+}
+
+void trackbuttonalt(int peen) { //diag, will show lstate and bstate in serial
+  buttonstate = digitalRead(peen);
+  digitalWrite(ledPin, buttonstate);
+  lstate = buttonstate;
+  Serial.println("lstate: ");
+  Serial.println(lstate);
+  Serial.println("bstate");
+  Serial.println(buttonstate);
+}
+
+void trackbutton(int peen) { //diag, will show lstate and bstate in serial
+  buttonstate = digitalRead(peen);
+  digitalWrite(ledPin, buttonstate);
+  lstate = buttonstate;
+}
+
+
+void novarM(int button) {
+  trackbuttonalt(button);
+  if (lstate == 1) {
+    start_motors();
   }
   else {
-    Serial.println("what the fuck yo");// editk for finalization
+    stop_motors();
   }
 }
 
-void motorevent(int motor_pin) {
-  unsigned long recent = sizeTwoFive();
-  if (recent >= 500) {
-    startmotor(motor_pin, 1);
-  }
-  else {
-    startmotor(motor_pin, 0);
-  }
-}
-
-void rMotor() {
- int state = trackbutton(bPin);
- if (state == 1) {
-   Serial.println("1");
+void withvarM(int button) { // run this AFTER readings are being taken (if taking the average is the opted way to do it)
+  trackbutton(button);
+  currentConcentration = sizeTwoFive();
+  if (lstate == 1) {
+    roller_motor();
    
- }
- else {
-   Serial.println("0");
- }
+    if (currentConcentration >= 1000) {
+      speedSetting(255);
+      vac_motor();
+    }
+    else {
+      speedSetting(128);
+      vac_off();
+    }
+
+    
+  }
+  else {
+    stop_motors();
+  }
 }
 
+void test() { // use this function to test if switch works. it does :))
+  novarM(bPin);
+}
 
+void motortest() {
+
+}
+
+void motorsweep() {
+  speedSetting(1);
+  delay(2000);
+  
+
+  for (int i = 0; i <= 255; i= i+10) {
+    speedSetting(i);
+    vac_motor();
+    delay(1000);
+    stop_motors();
+    delay(1000);
+    Serial.println(i);
+  }
+  
+
+}
 
 //run
 void setup() {
   Serial.begin(9600);
   pinMode(parM1, INPUT);
   pinMode(parM2, INPUT);
-  pinMode(eRoller, OUTPUT);
-  pinMode(vacMotor, OUTPUT);
+  pinMode(PIN_IN1,OUTPUT);
+  pinMode(PIN_IN2,OUTPUT);
+  pinMode(PIN_IN3,OUTPUT);
+  pinMode(PIN_IN4,OUTPUT);
+  pinMode(PIN_EN1,OUTPUT);
+  pinMode(PIN_EN2,OUTPUT);
   starttime = millis(); //start to read time in ms
-  pinMode(bPin, INPUT); // state button pin as an input
+  pinMode(bPin, INPUT); 
+  pinMode(ledPin, OUTPUT);
+  speedSetting(128); // initial speed for vac motor upon startup
   
 }
 
-void loop() {
-  motorevent(vacMotor);
-  delay(5000);
-  motorevent(eRoller);
-  delay(5000);
+void loop() { 
+  withvarM(bPin);
+
 }
